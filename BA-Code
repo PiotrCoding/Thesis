@@ -1,0 +1,2118 @@
+import numpy as np
+import os
+import scipy.io as sio
+import scipy
+import scipy.signal
+import matplotlib.pyplot as plt
+import copy
+import pandas as pd
+
+# FUNCTIONS
+
+#--3D -> 1D
+def normSignal(signal):
+    newSignal = np.linalg.norm(signal, axis=1)
+    return newSignal
+
+#--Resample 
+def resampleSignal(signal, Fs_signal, Fs_resample=100):
+    if Fs_signal == Fs_resample:
+        return signal
+    else:
+        length = len(signal)
+        while not length \% (Fs_signal/Fs_resample) == 0:
+            signal = signal[:(length-1)]
+            length = len(signal)
+        newSignal = scipy.signal.resample(signal, int(length*(Fs_resample/Fs_signal)))
+        return newSignal
+        
+#--Bandpass
+def bandpassSiganl(signal, Fs_signal, Fc_low=0.5, Fc_high=10, order=10):
+    sosBP = scipy.signal.butter(order, [Fc_low, Fc_high], 'bandpass', fs=Fs_signal, output='sos')
+    newSignal = scipy.signal.sosfiltfilt(sosBP, signal)
+    return newSignal
+    
+#--remove first values if nessessary
+# nur acc untersuchen und danach falls noetig bei acc abschneiden sowie bei gyro den selben Teil abschneiden
+def checkSignal(accSignal, gyroSignal, Fs_signal, t_fenster=1, faktor_schwellwert=1/3):
+    fensterbreite = int(t_fenster * Fs_signal)
+    spectrums = []
+    numFenster = int(len(accSignal)/fensterbreite)
+    for n in range(numFenster):
+        spectrum = accSignal[n*fensterbreite:(n+1)*fensterbreite]
+        spectrum = np.fft.fft(spectrum)
+        spectrums.append(spectrum)
+    maxSumme = 0
+    for n in range(numFenster):
+        spectrum_abs = abs(spectrums[n])
+        spectrum_sum = np.sum(spectrum_abs)
+        if spectrum_sum > maxSumme:
+            maxSumme = spectrum_sum
+    numSchwacheFenster = 0
+    m = 0
+    while m < numFenster:
+        spectrum_abs = abs(spectrums[m])
+        spectrum_sum = np.sum(spectrum_abs)
+        if spectrum_sum < (faktor_schwellwert*maxSumme):
+            numSchwacheFenster += 1
+        else:
+            m = numFenster
+        m += 1
+
+    if numSchwacheFenster == 0:
+        return accSignal, gyroSignal
+    else:
+        accNewSignal = accSignal[numSchwacheFenster*fensterbreite:]
+        gyroNewSignal = gyroSignal[numSchwacheFenster*fensterbreite:]
+        return accNewSignal, gyroNewSignal
+        
+# DATA ACQUISITION
+
+# Ort zum Matlab daten auslesen
+PATH = #Ort der gespeicherten Daten
+
+#Med off----------------------------------
+fsOffSl, accOffSl, gyroOffSl = [], [], []
+fsOffPr, accOffPr, gyroOffPr = [], [], []
+fsOffFa, accOffFa, gyroOffFa = [], [], []
+#Med on-----------------------------------
+fsOnSl, accOnSl, gyroOnSl = [], [], []
+fsOnPr, accOnPr, gyroOnPr = [], [], []
+fsOnFa, accOnFa, gyroOnFa = [], [], []
+#Control----------------------------------
+fsControlSl, accControlSl, gyroControlSl = [], [], []
+fsControlPr, accControlPr, gyroControlPr = [], [], []
+fsControlFa, accControlFa, gyroControlFa = [], [], []
+
+#DATA ACQUISITION-------------------------
+#Parkinson
+for i in os.listdir(os.path.join(PATH, 'parkinson')):
+    if 'pp' in i:
+        deepFolderList = os.listdir(os.path.join(PATH, 'parkinson', i))
+        for file in deepFolderList:
+            matlab = sio.loadmat(os.path.join(PATH, 'parkinson', i, file))['data'][0][0]
+            
+            #Med off
+            if 'off' in file:
+                if 'slow' in file:
+                    fsOffSl.append(matlab[3][0][0])
+                    fsOffSl.append(matlab[3][0][0])
+                    accOffSl.append(matlab[0][:,:,3])
+                    accOffSl.append(matlab[0][:,:,5])
+                    gyroOffSl.append(matlab[1][:,:,3])
+                    gyroOffSl.append(matlab[1][:,:,5])
+                elif 'preferred' in file:
+                    fsOffPr.append(matlab[3][0][0])
+                    fsOffPr.append(matlab[3][0][0])
+                    accOffPr.append(matlab[0][:,:,3])
+                    accOffPr.append(matlab[0][:,:,5])
+                    gyroOffPr.append(matlab[1][:,:,3])
+                    gyroOffPr.append(matlab[1][:,:,5])
+                elif 'fast' in file:
+                    fsOffFa.append(matlab[3][0][0])
+                    fsOffFa.append(matlab[3][0][0])
+                    accOffFa.append(matlab[0][:,:,3])
+                    accOffFa.append(matlab[0][:,:,5])
+                    gyroOffFa.append(matlab[1][:,:,3])
+                    gyroOffFa.append(matlab[1][:,:,5])
+                
+            #Med on
+            if 'on' in file:
+                if 'slow' in file:
+                    fsOnSl.append(matlab[3][0][0])
+                    fsOnSl.append(matlab[3][0][0])
+                    accOnSl.append(matlab[0][:,:,3])
+                    accOnSl.append(matlab[0][:,:,5])
+                    gyroOnSl.append(matlab[1][:,:,3])
+                    gyroOnSl.append(matlab[1][:,:,5])
+                elif 'preferred' in file:
+                    fsOnPr.append(matlab[3][0][0])
+                    fsOnPr.append(matlab[3][0][0])
+                    accOnPr.append(matlab[0][:,:,3])
+                    accOnPr.append(matlab[0][:,:,5])
+                    gyroOnPr.append(matlab[1][:,:,3])
+                    gyroOnPr.append(matlab[1][:,:,5])
+                elif 'fast' in file:
+                    fsOnFa.append(matlab[3][0][0])
+                    fsOnFa.append(matlab[3][0][0])
+                    accOnFa.append(matlab[0][:,:,3])
+                    accOnFa.append(matlab[0][:,:,5])
+                    gyroOnFa.append(matlab[1][:,:,3])
+                    gyroOnFa.append(matlab[1][:,:,5])
+# Control
+for i in os.listdir(os.path.join(PATH, 'controls')):
+    if 'pp' in i:
+        deepFolderList = os.listdir(os.path.join(PATH, 'controls', i))
+        for file in deepFolderList:
+            matlab = sio.loadmat(os.path.join(PATH, 'controls', i, file))['data'][0][0]
+            
+            if 'slow' in file:
+                fsControlSl.append(matlab[3][0][0])
+                fsControlSl.append(matlab[3][0][0])
+                accControlSl.append(matlab[0][:,:,3])
+                accControlSl.append(matlab[0][:,:,5])
+                gyroControlSl.append(matlab[1][:,:,3])
+                gyroControlSl.append(matlab[1][:,:,5])
+            elif 'preferred' in file:
+                fsControlPr.append(matlab[3][0][0])
+                fsControlPr.append(matlab[3][0][0])
+                accControlPr.append(matlab[0][:,:,3])
+                accControlPr.append(matlab[0][:,:,5])
+                gyroControlPr.append(matlab[1][:,:,3])
+                gyroControlPr.append(matlab[1][:,:,5])
+            elif 'fast' in file:
+                fsControlFa.append(matlab[3][0][0])
+                fsControlFa.append(matlab[3][0][0])
+                accControlFa.append(matlab[0][:,:,3])
+                accControlFa.append(matlab[0][:,:,5])
+                gyroControlFa.append(matlab[1][:,:,3])
+                gyroControlFa.append(matlab[1][:,:,5])
+                
+#------------------------------
+accOff = [accOffSl, accOffPr, accOffFa]
+accOn = [accOnSl, accOnPr, accOnFa]
+accControl = [accControlSl, accControlPr, accControlFa]
+
+gyroOff = [gyroOffSl, gyroOffPr, gyroOffFa]
+gyroOn = [gyroOnSl, gyroOnPr, gyroOnFa]
+gyroControl = [gyroControlSl, gyroControlPr, gyroControlFa]
+#------------------------------
+accClasses = [accOff, accOn, accControl]
+gyroClasses = [gyroOff, gyroOn, gyroControl]
+#---
+#-
+#--- same sample frequency for acc & gyro
+freqsOff = [fsOffSl, fsOffPr, fsOffFa]
+freqsOn = [fsOnSl, fsOnPr, fsOnFa]
+freqsControl = [fsControlSl, fsControlPr, fsControlFa]
+#------------------------------
+freqsClasses = [freqsOff, freqsOn, freqsControl]
+
+# PRE PROCESSING
+
+for i in range(len(accClasses)):
+    for j in range(len(accClasses[i])):
+        for k in range(len(accClasses[i][j])):
+            
+            accSignal = accClasses[i][j][k]
+            gyroSignal = gyroClasses[i][j][k]
+            fs_Signal = freqsClasses[i][j][k]
+            
+            #-- 3D->1D
+            accSignal = normSignal(accSignal)
+            gyroSignal = normSignal(gyroSignal)
+            
+            #-- resample
+            accSignal = resampleSignal(accSignal, fs_Signal)
+            gyroSignal = resampleSignal(gyroSignal, fs_Signal)
+            fs_Signal = 100
+            
+            #-- bandpass
+            accSignal = bandpassSiganl(accSignal,fs_Signal)
+            gyroSignal = bandpassSiganl(gyroSignal,fs_Signal)
+            
+            #-- check signal for low movement parts
+            accSignal, gyroSignal = checkSignal(accSignal, gyroSignal, fs_Signal)    
+            
+            accClasses[i][j][k] = accSignal
+            gyroClasses[i][j][k] = gyroSignal
+            
+#-- remove too short signals
+minLaenge = 4 #seconds
+fs_Signal = 100
+minFenster = minLaenge * fs_Signal
+
+for i in range(len(accClasses)):
+    for j in range(len(accClasses[i])):
+        l = 0
+        for k in range(len(accClasses[i][j])):
+            n = k-l
+            if len(accClasses[i][j][n]) < minFenster:
+                del accClasses[i][j][n]
+                del gyroClasses[i][j][n]
+                l += 1
+                
+# FEATURE EXTRACTION
+
+#------------------------------
+off = [accOffSl, gyroOffSl,
+       accOffPr, gyroOffPr,
+       accOffFa, gyroOffFa]
+#
+on = [accOnSl, gyroOnSl,
+      accOnPr, gyroOnPr,
+      accOnFa, gyroOnFa]
+#
+control = [accControlSl, gyroControlSl,
+           accControlPr, gyroControlPr,
+           accControlFa, gyroControlFa]
+#------------------------------
+classes = [off, on, control]
+
+#FFT
+#-----------------------------
+accOffSl_S, gyroOffSl_S = [], []
+accOffPr_S, gyroOffPr_S = [], []
+accOffFa_S, gyroOffFa_S = [], []
+#-----------------------------
+accOnSl_S, gyroOnSl_S = [], []
+accOnPr_S, gyroOnPr_S = [], []
+accOnFa_S, gyroOnFa_S = [], []
+#-----------------------------
+accControlSl_S, gyroControlSl_S = [], []
+accControlPr_S, gyroControlPr_S = [], []
+accControlFa_S, gyroControlFa_S = [], []
+#
+off_S = [accOffSl_S, gyroOffSl_S,
+         accOffPr_S, gyroOffPr_S,
+         accOffFa_S, gyroOffFa_S]
+#------------------------------
+on_S = [accOnSl_S, gyroOnSl_S,
+        accOnPr_S, gyroOnPr_S,
+        accOnFa_S, gyroOnFa_S]
+#------------------------------
+control_S = [accControlSl_S, gyroControlSl_S,
+             accControlPr_S, gyroControlPr_S,
+             accControlFa_S, gyroControlFa_S]
+#
+classes_S = [off_S, on_S, control_S]
+
+s_window = 4 #seconds
+overlapping = 0.5 #50%
+Fs = 100
+windowWidth = s_window*Fs
+windowSteps = int(windowWidth*overlapping)
+#
+#window funciton
+windowKind = np.hanning(windowWidth)
+#
+freq = np.fft.fftfreq(windowWidth, 1/Fs)
+freq = freq[:int(windowWidth/2+(windowWidth%2))]
+#
+Fc_Low = 0.5 #Hz
+Fc_High = 8 #Hz
+#
+index_start = np.where(freq>=Fc_Low)[0][0]
+index_end = np.where(freq>=Fc_High)[0][0]
+#
+freq = freq[index_start:(index_end+1)]
+#
+a = 0
+for klasse, klasse_S in zip(classes, classes_S):
+    for data , data_S in zip(klasse, klasse_S):
+        for i in range(len(data)):
+            spectrums = []
+            numWindows = int(len(data[i])/windowSteps-1)
+            for j in range(numWindows):
+                #Fenster bilden
+                spectrum = data[i][j*windowSteps:j*windowSteps+windowWidth]
+                spectrum = spectrum*windowKind
+                #fft
+                spectrum = np.fft.fft(spectrum)
+                spectrum = abs(spectrum) / windowWidth
+                spectrum = spectrum[:int(windowWidth/2+(windowWidth%2))]
+                spectrums.append(spectrum)
+            
+# Zu beobachtende Spektrum-Bandbreite auswaehlen
+#-----------------------------
+Fc_Low = 0.5 #Hz
+Fc_High = 8 #Hz
+#
+index_start = np.where(freq>=Fc_Low)[0][0]
+index_end = np.where(freq>=Fc_High)[0][0]
+#
+for klasse_S in classes_S:
+    for data_S in klasse_S:
+        for i in range(len(data_S)):
+            data_S[i] = data_S[i][index_start:(index_end+1)]
+            
+# POST-PROCESSING / FEATURE EXTRACTION
+
+#--SPECTRUM PEAKS
+#-----------------------------
+accOffSlFil_S_P, gyroOffSlFil_S_P = [], []
+accOffPrFil_S_P, gyroOffPrFil_S_P = [], []
+accOffFaFil_S_P, gyroOffFaFil_S_P = [], []
+#-----------------------------
+accOnSlFil_S_P, gyroOnSlFil_S_P = [], []
+accOnPrFil_S_P, gyroOnPrFil_S_P = [], []
+accOnFaFil_S_P, gyroOnFaFil_S_P = [], []
+#-----------------------------
+accControlSlFil_S_P, gyroControlSlFil_S_P = [], []
+accControlPrFil_S_P, gyroControlPrFil_S_P = [], []
+accControlFaFil_S_P, gyroControlFaFil_S_P = [], []
+#
+off_S_P = [accOffSlFil_S_P, gyroOffSlFil_S_P,
+           accOffPrFil_S_P, gyroOffPrFil_S_P,
+           accOffFaFil_S_P, gyroOffFaFil_S_P]
+#------------------------------
+on_S_P = [accOnSlFil_S_P, gyroOnSlFil_S_P,
+        accOnPrFil_S_P, gyroOnPrFil_S_P,
+        accOnFaFil_S_P, gyroOnFaFil_S_P]
+#------------------------------
+control_S_P = [accControlSlFil_S_P, gyroControlSlFil_S_P,
+               accControlPrFil_S_P, gyroControlPrFil_S_P,
+               accControlFaFil_S_P, gyroControlFaFil_S_P]
+#
+classes_S_P = [off_S_P, on_S_P, control_S_P]
+#
+#
+for klasse_S, klasse_S_P in zip(classes_S, classes_S_P):
+    for data_S, data_S_P in zip(klasse_S, klasse_S_P):
+        for i in range(len(data_S)):
+            data_S_P.append(np.amax(data_S[i]))
+            
+#--SPECTRUM PEAKS
+#-----------------------------
+accOffSlFil_S_P, gyroOffSlFil_S_P = [], []
+accOffPrFil_S_P, gyroOffPrFil_S_P = [], []
+accOffFaFil_S_P, gyroOffFaFil_S_P = [], []
+#-----------------------------
+accOnSlFil_S_P, gyroOnSlFil_S_P = [], []
+accOnPrFil_S_P, gyroOnPrFil_S_P = [], []
+accOnFaFil_S_P, gyroOnFaFil_S_P = [], []
+#-----------------------------
+accControlSlFil_S_P, gyroControlSlFil_S_P = [], []
+accControlPrFil_S_P, gyroControlPrFil_S_P = [], []
+accControlFaFil_S_P, gyroControlFaFil_S_P = [], []
+#
+off_S_P = [accOffSlFil_S_P, gyroOffSlFil_S_P,
+           accOffPrFil_S_P, gyroOffPrFil_S_P,
+           accOffFaFil_S_P, gyroOffFaFil_S_P]
+#------------------------------
+on_S_P = [accOnSlFil_S_P, gyroOnSlFil_S_P,
+        accOnPrFil_S_P, gyroOnPrFil_S_P,
+        accOnFaFil_S_P, gyroOnFaFil_S_P]
+#------------------------------
+control_S_P = [accControlSlFil_S_P, gyroControlSlFil_S_P,
+               accControlPrFil_S_P, gyroControlPrFil_S_P,
+               accControlFaFil_S_P, gyroControlFaFil_S_P]
+#
+classes_S_P = [off_S_P, on_S_P, control_S_P]
+#
+#
+for klasse_S, klasse_S_P in zip(classes_S, classes_S_P):
+    for data_S, data_S_P in zip(klasse_S, klasse_S_P):
+        for i in range(len(data_S)):
+            data_S_P.append(np.amax(data_S[i]))
+            
+#--SPECTRUM MEAN (0.5Hz-8Hz)
+#-----------------------------
+accOffSlFil_S_Mean, gyroOffSlFil_S_Mean = [], []
+accOffPrFil_S_Mean, gyroOffPrFil_S_Mean = [], []
+accOffFaFil_S_Mean, gyroOffFaFil_S_Mean = [], []
+#-----------------------------
+accOnSlFil_S_Mean, gyroOnSlFil_S_Mean = [], []
+accOnPrFil_S_Mean, gyroOnPrFil_S_Mean = [], []
+accOnFaFil_S_Mean, gyroOnFaFil_S_Mean = [], []
+#-----------------------------
+accControlSlFil_S_Mean, gyroControlSlFil_S_Mean = [], []
+accControlPrFil_S_Mean, gyroControlPrFil_S_Mean = [], []
+accControlFaFil_S_Mean, gyroControlFaFil_S_Mean = [], []
+#
+off_S_Mean = [accOffSlFil_S_Mean, gyroOffSlFil_S_Mean,
+              accOffPrFil_S_Mean, gyroOffPrFil_S_Mean,
+              accOffFaFil_S_Mean, gyroOffFaFil_S_Mean]
+#------------------------------
+on_S_Mean = [accOnSlFil_S_Mean, gyroOnSlFil_S_Mean,
+             accOnPrFil_S_Mean, gyroOnPrFil_S_Mean,
+             accOnFaFil_S_Mean, gyroOnFaFil_S_Mean]
+#------------------------------
+control_S_Mean = [accControlSlFil_S_Mean, gyroControlSlFil_S_Mean,
+                  accControlPrFil_S_Mean, gyroControlPrFil_S_Mean,
+                  accControlFaFil_S_Mean, gyroControlFaFil_S_Mean]
+#
+classes_S_Mean = [off_S_Mean, on_S_Mean, control_S_Mean]
+#
+#
+for klasse_S, klasse_S_Mean in zip(classes_S, classes_S_Mean):
+    for data_S, data_S_Mean in zip(klasse_S, klasse_S_Mean):
+        for i in range(len(data_S)):
+            data_S_Mean.append(np.mean(data_S[i]))
+            
+#--SPECTRUM STANDARD DEVIATION (0.5Hz-8Hz)
+#-----------------------------
+accOffSlFil_S_Std, gyroOffSlFil_S_Std = [], []
+accOffPrFil_S_Std, gyroOffPrFil_S_Std = [], []
+accOffFaFil_S_Std, gyroOffFaFil_S_Std = [], []
+#-----------------------------
+accOnSlFil_S_Std, gyroOnSlFil_S_Std = [], []
+accOnPrFil_S_Std, gyroOnPrFil_S_Std = [], []
+accOnFaFil_S_Std, gyroOnFaFil_S_Std = [], []
+#-----------------------------
+accControlSlFil_S_Std, gyroControlSlFil_S_Std = [], []
+accControlPrFil_S_Std, gyroControlPrFil_S_Std = [], []
+accControlFaFil_S_Std, gyroControlFaFil_S_Std = [], []
+#
+off_S_Std = [accOffSlFil_S_Std, gyroOffSlFil_S_Std,
+             accOffPrFil_S_Std, gyroOffPrFil_S_Std,
+             accOffFaFil_S_Std, gyroOffFaFil_S_Std]
+#------------------------------
+on_S_Std = [accOnSlFil_S_Std, gyroOnSlFil_S_Std,
+            accOnPrFil_S_Std, gyroOnPrFil_S_Std,
+            accOnFaFil_S_Std, gyroOnFaFil_S_Std]
+#------------------------------
+control_S_Std = [accControlSlFil_S_Std, gyroControlSlFil_S_Std,
+                 accControlPrFil_S_Std, gyroControlPrFil_S_Std,
+                 accControlFaFil_S_Std, gyroControlFaFil_S_Std]
+#
+classes_S_Std = [off_S_Std, on_S_Std, control_S_Std]
+#
+#
+for klasse_S, klasse_S_Std in zip(classes_S, classes_S_Std):
+    for data_S, data_S_Std in zip(klasse_S, klasse_S_Std):
+        for i in range(len(data_S)):
+            data_S_Std.append(np.std(data_S[i]))
+            
+#--SPECTRUM NUMBER OF PEAKS OVER MEAN
+#-----------------------------
+accOffSlFil_S_NumP, gyroOffSlFil_S_NumP = [], []
+accOffPrFil_S_NumP, gyroOffPrFil_S_NumP = [], []
+accOffFaFil_S_NumP, gyroOffFaFil_S_NumP = [], []
+#-----------------------------
+accOnSlFil_S_NumP, gyroOnSlFil_S_NumP = [], []
+accOnPrFil_S_NumP, gyroOnPrFil_S_NumP = [], []
+accOnFaFil_S_NumP, gyroOnFaFil_S_NumP = [], []
+#-----------------------------
+accControlSlFil_S_NumP, gyroControlSlFil_S_NumP = [], []
+accControlPrFil_S_NumP, gyroControlPrFil_S_NumP = [], []
+accControlFaFil_S_NumP, gyroControlFaFil_S_NumP = [], []
+#
+off_S_NumP = [accOffSlFil_S_NumP, gyroOffSlFil_S_NumP,
+              accOffPrFil_S_NumP, gyroOffPrFil_S_NumP,
+              accOffFaFil_S_NumP, gyroOffFaFil_S_NumP]
+#------------------------------
+on_S_NumP = [accOnSlFil_S_NumP, gyroOnSlFil_S_NumP,
+             accOnPrFil_S_NumP, gyroOnPrFil_S_NumP,
+             accOnFaFil_S_NumP, gyroOnFaFil_S_NumP]
+#------------------------------
+control_S_NumP = [accControlSlFil_S_NumP, gyroControlSlFil_S_NumP,
+                 accControlPrFil_S_NumP, gyroControlPrFil_S_NumP,
+                 accControlFaFil_S_NumP, gyroControlFaFil_S_NumP]
+#
+classes_S_NumP = [off_S_NumP, on_S_NumP, control_S_NumP]
+#
+#
+for klasse_S, klasse_S_NumP in zip(classes_S, classes_S_NumP):
+    for data_S, data_S_NumP in zip(klasse_S, klasse_S_NumP):
+        for i in range(len(data_S)):
+            data_S_NumP.append(len(np.where(data_S[i]>np.mean(data_S[i]))[0]))
+            
+#--SPECTRUM NUMBER OF PEAKS OVER MEAN
+#-----------------------------
+accOffSlFil_S_NumP, gyroOffSlFil_S_NumP = [], []
+accOffPrFil_S_NumP, gyroOffPrFil_S_NumP = [], []
+accOffFaFil_S_NumP, gyroOffFaFil_S_NumP = [], []
+#-----------------------------
+accOnSlFil_S_NumP, gyroOnSlFil_S_NumP = [], []
+accOnPrFil_S_NumP, gyroOnPrFil_S_NumP = [], []
+accOnFaFil_S_NumP, gyroOnFaFil_S_NumP = [], []
+#-----------------------------
+accControlSlFil_S_NumP, gyroControlSlFil_S_NumP = [], []
+accControlPrFil_S_NumP, gyroControlPrFil_S_NumP = [], []
+accControlFaFil_S_NumP, gyroControlFaFil_S_NumP = [], []
+#
+off_S_NumP = [accOffSlFil_S_NumP, gyroOffSlFil_S_NumP,
+              accOffPrFil_S_NumP, gyroOffPrFil_S_NumP,
+              accOffFaFil_S_NumP, gyroOffFaFil_S_NumP]
+#------------------------------
+on_S_NumP = [accOnSlFil_S_NumP, gyroOnSlFil_S_NumP,
+             accOnPrFil_S_NumP, gyroOnPrFil_S_NumP,
+             accOnFaFil_S_NumP, gyroOnFaFil_S_NumP]
+#------------------------------
+control_S_NumP = [accControlSlFil_S_NumP, gyroControlSlFil_S_NumP,
+                 accControlPrFil_S_NumP, gyroControlPrFil_S_NumP,
+                 accControlFaFil_S_NumP, gyroControlFaFil_S_NumP]
+#
+classes_S_NumP = [off_S_NumP, on_S_NumP, control_S_NumP]
+#
+#
+for klasse_S, klasse_S_NumP in zip(classes_S, classes_S_NumP):
+    for data_S, data_S_NumP in zip(klasse_S, klasse_S_NumP):
+        for i in range(len(data_S)):
+            data_S_NumP.append(len(np.where(data_S[i]>np.mean(data_S[i]))[0]))
+
+# CREATE AND SAVE FEATURES DATASET
+
+features = [classes_S_P, Fps, classes_S_Mean, classes_S_Std, classes_S_NumP, classes_P]
+features_names = ['Accelerometer Spectrum Peak Amplitude', 'Gyroscope Spectrum Peak Amplitude',
+                  'Accelerometer Spectrum Peak Frequency', 'Gyroscope Spectrum Peak Frequency',
+                  'Accelerometer Spectrum Mean', 'Gyroscope Spectrum Mean',
+                  'Accelerometer Spectrum Standard Deviation', 'Gyroscope Spectrum Standard Deviation',
+                  'Accelerometer Spectrum Peaks above Mean',  'Gyroscope Spectrum Peaks above Mean',
+                  'Accelerometer Time-Signal Peak Magnitude', 'Gyroscope Time-Signal Peak Magnitude']
+                  
+FeaturesSet = pd.DataFrame()
+# i: features // peak, frequency, mean....
+for i in range(len(features)):
+    acc = []
+    gyro = []
+    # j: Patient // med off, med on, control
+    for j in range(len(features[i])):
+        # k: acc & gyro speed // acc slow, gyro slow, acc preferred, gyro preferred, acc fast, gyro fast
+        acc += list(features[i][j][0])
+        acc += list(features[i][j][2])
+        acc += list(features[i][j][4])
+        gyro += list(features[i][j][1])
+        gyro += list(features[i][j][3])
+        gyro += list(features[i][j][5])
+    FeaturesSet[features_names[i*2]] = acc
+    FeaturesSet[features_names[i*2+1]] = gyro
+    
+# 2 classes (Parkinson, Control)
+y_parkinson = [0]*(len(features[0][0][0])+len(features[0][0][2])+len(features[0][0][4])+len(features[0][1][0])+len(features[0][1][2])+len(features[0][1][4]))
+y_control = [1]*(len(features[0][2][0])+len(features[0][2][2])+len(features[0][2][4]))
+y3 = y_parkinson + y_control
+FeaturesSet3 = FeaturesSet
+FeaturesSet3['Output'] = y3
+FeaturesSet3.to_csv(r'//Users//piotr//Documents//FeatureSet3.csv', index=False, header=True)
+
+PATH3 = '//Users//piotr//Documents//FeatureSet3.csv' # CSV-File with 2 classes
+featureSet = pd.read_csv(PATH3) # 2 classes
+
+# SUPPORT VECTOR MACHINE
+
+from sklearn.model_selection import train_test_split
+from sklearn import preprocessing
+from sklearn.svm import SVC
+from sklearn.model_selection import cross_val_score
+
+def teste(f_array, featureSet=featureSet):
+    X = np.array(featureSet.iloc[:,f_array])
+    X_scaled = preprocessing.scale(X)
+    y = np.array(featureSet.iloc[:,-1])
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+    
+    kern = ['poly', 'rbf']
+    gammas = [0.1, 0.01, 0.001, 0.0001]
+    
+    mWert = 0
+    stdAbweichung = 0
+    
+    for kernArt in kern:
+        for i in range(10):
+            for j in range(len(gammas)):
+                clf = SVC(C=(i+1)*10/4,
+                          kernel=kernArt,
+                          gamma=gammas[j],
+                          tol=5e-3,
+                          max_iter=250000,
+                          random_state=1)
+                
+                score  = cross_val_score(clf, X_train, y_train, cv=5)
+                s_mean = score.mean()
+                s_std = score.std()
+                
+                if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+                    mWert = s_mean
+                    stdAbweichung = s_std
+
+    for i in range(10):
+        clf = SVC(C=(i+1)*10/4,
+                  kernel='linear',
+                  tol=5e-3,
+                  max_iter=250000,
+                  random_state=1)
+        
+        score  = cross_val_score(clf, X_train, y_train, cv=5)
+        s_mean = score.mean()
+        s_std = score.std()
+        
+        if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+            mWert = s_mean
+            stdAbweichung = s_std
+                        
+    return mWert, stdAbweichung
+    
+#--1 Merkmal
+print('----1 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(12):
+    x_array = [i]
+    
+    mWert, stdAbweichung = teste(f_array=x_array)
+    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+        print('!', end='')  
+    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+        h_mWert = mWert
+        h_stdAbweichung = stdAbweichung
+        h_com = copy.deepcopy(x_array)
+        print(':', end='')  
+    else:
+        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--2 Merkmal
+print('----2 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(11):
+    for j in range(11):
+        if i+1+j > 11:
+            break
+        else:
+            x_array = [i,
+                       i+1+j]
+            mWert, stdAbweichung = teste(f_array=x_array)
+            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                print('!', end='')  
+            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                h_mWert = mWert
+                h_stdAbweichung = stdAbweichung
+                h_com = copy.deepcopy(x_array)
+                print(':', end='')  
+            else:
+                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--3 Merkmal
+print('----3 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(10):
+    for j in range(10):
+        for k in range(10):
+            if i+1+j+1+k > 11:
+                break
+            else:
+                x_array = [i,
+                           i+1+j,
+                           i+1+j+1+k]
+                mWert, stdAbweichung = teste(f_array=x_array)
+                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                    print('!', end='')  
+                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                    h_mWert = mWert
+                    h_stdAbweichung = stdAbweichung
+                    h_com = copy.deepcopy(x_array)
+                    print(':', end='')  
+                else:
+                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--4 Merkmal
+print('----4 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(9):
+    for j in range(9):
+        for k in range(9):
+            for l in range(9):
+                if i+1+j+1+k+1+l > 11:
+                    break
+                else:
+                    x_array = [i,
+                               i+1+j,
+                               i+1+j+1+k,
+                               i+1+j+1+k+1+l]
+                    mWert, stdAbweichung = teste(f_array=x_array)
+                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                        print('!', end='')  
+                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                        h_mWert = mWert
+                        h_stdAbweichung = stdAbweichung
+                        h_com = copy.deepcopy(x_array)
+                        print(':', end='')  
+                    else:
+                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--5 Merkmal
+print('----5 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(8):
+    for j in range(8):
+        for k in range(8):
+            for l in range(8):
+                for m in range(8):
+                    if i+1+j+1+k+1+l+1+m > 11:
+                        break
+                    else:
+                        x_array = [i,
+                                   i+1+j,
+                                   i+1+j+1+k,
+                                   i+1+j+1+k+1+l,
+                                   i+1+j+1+k+1+l+1+m]
+                        mWert, stdAbweichung = teste(f_array=x_array)
+                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                            print('!', end='')  
+                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                            h_mWert = mWert
+                            h_stdAbweichung = stdAbweichung
+                            h_com = copy.deepcopy(x_array)
+                            print(':', end='')  
+                        else:
+                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--6 Merkmal
+print('----6 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(7):
+    for j in range(7):
+        for k in range(7):
+            for l in range(7):
+                for m in range(7):
+                    for n in range(7):
+                        if i+1+j+1+k+1+l+1+m+1+n > 11:
+                            break
+                        else:
+                            x_array = [i,
+                                       i+1+j,
+                                       i+1+j+1+k,
+                                       i+1+j+1+k+1+l,
+                                       i+1+j+1+k+1+l+1+m,
+                                       i+1+j+1+k+1+l+1+m+1+n]
+                            mWert, stdAbweichung = teste(f_array=x_array)
+                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                print('!', end='')  
+                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                h_mWert = mWert
+                                h_stdAbweichung = stdAbweichung
+                                h_com = copy.deepcopy(x_array)
+                                print(':', end='')  
+                            else:
+                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--7 Merkmal
+print('----7 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(6):
+    for j in range(6):
+        for k in range(6):
+            for l in range(6):
+                for m in range(6):
+                    for n in range(6):
+                        for o in range(6):
+                            if i+1+j+1+k+1+l+1+m+1+n+1+o > 11:
+                                break
+                            else:
+                                x_array = [i,
+                                           i+1+j,
+                                           i+1+j+1+k,
+                                           i+1+j+1+k+1+l,
+                                           i+1+j+1+k+1+l+1+m,
+                                           i+1+j+1+k+1+l+1+m+1+n,
+                                           i+1+j+1+k+1+l+1+m+1+n+1+o]
+                                mWert, stdAbweichung = teste(f_array=x_array)
+                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                    print('!', end='')  
+                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                    h_mWert = mWert
+                                    h_stdAbweichung = stdAbweichung
+                                    h_com = copy.deepcopy(x_array)
+                                    print(':', end='')  
+                                else:
+                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--8 Merkmal
+print('----8 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(5):
+    for j in range(5):
+        for k in range(5):
+            for l in range(5):
+                for m in range(5):
+                    for n in range(5):
+                        for o in range(5):
+                            for p in range(5):
+                                if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p > 11:
+                                    break
+                                else:
+                                    x_array = [i,
+                                               i+1+j,
+                                               i+1+j+1+k,
+                                               i+1+j+1+k+1+l,
+                                               i+1+j+1+k+1+l+1+m,
+                                               i+1+j+1+k+1+l+1+m+1+n,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o+1+p]
+                                    mWert, stdAbweichung = teste(f_array=x_array)
+                                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                        print('!', end='')  
+                                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                        h_mWert = mWert
+                                        h_stdAbweichung = stdAbweichung
+                                        h_com = copy.deepcopy(x_array)
+                                        print(':', end='')  
+                                    else:
+                                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--9 Merkmal
+print('----9 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(4):
+    for j in range(4):
+        for k in range(4):
+            for l in range(4):
+                for m in range(4):
+                    for n in range(4):
+                        for o in range(4):
+                            for p in range(4):
+                                for q in range(4):
+                                    if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q > 11:
+                                        break
+                                    else:
+                                        x_array = [i,
+                                                   i+1+j,
+                                                   i+1+j+1+k,
+                                                   i+1+j+1+k+1+l,
+                                                   i+1+j+1+k+1+l+1+m,
+                                                   i+1+j+1+k+1+l+1+m+1+n,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q]
+                                        mWert, stdAbweichung = teste(f_array=x_array)
+                                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                            print('!', end='')  
+                                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                            h_mWert = mWert
+                                            h_stdAbweichung = stdAbweichung
+                                            h_com = copy.deepcopy(x_array)
+                                            print(':', end='')  
+                                        else:
+                                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--10 Merkmal
+print('----10 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(3):
+    for j in range(3):
+        for k in range(3):
+            for l in range(3):
+                for m in range(3):
+                    for n in range(3):
+                        for o in range(3):
+                            for p in range(3):
+                                for q in range(3):
+                                    for r in range(3):
+                                        if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r > 11:
+                                            break
+                                        else:
+                                            x_array = [i,
+                                                       i+1+j,
+                                                       i+1+j+1+k,
+                                                       i+1+j+1+k+1+l,
+                                                       i+1+j+1+k+1+l+1+m,
+                                                       i+1+j+1+k+1+l+1+m+1+n,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r]
+                                            mWert, stdAbweichung = teste(f_array=x_array)
+                                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                print('!', end='')  
+                                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                h_mWert = mWert
+                                                h_stdAbweichung = stdAbweichung
+                                                h_com = copy.deepcopy(x_array)
+                                                print(':', end='')  
+                                            else:
+                                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--11 Merkmal
+print('----11 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(2):
+    for j in range(2):
+        for k in range(2):
+            for l in range(2):
+                for m in range(2):
+                    for n in range(2):
+                        for o in range(2):
+                            for p in range(2):
+                                for q in range(2):
+                                    for r in range(2):
+                                        for s in range(2):
+                                            if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s > 11:
+                                                break
+                                            else:
+                                                x_array = [i,
+                                                           i+1+j,
+                                                           i+1+j+1+k,
+                                                           i+1+j+1+k+1+l,
+                                                           i+1+j+1+k+1+l+1+m,
+                                                           i+1+j+1+k+1+l+1+m+1+n,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s]
+                                                mWert, stdAbweichung = teste(f_array=x_array)
+                                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                    print('!', end='')  
+                                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                    h_mWert = mWert
+                                                    h_stdAbweichung = stdAbweichung
+                                                    h_com = copy.deepcopy(x_array)
+                                                    print(':', end='')  
+                                                else:
+                                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--12 Merkmale
+print('----12 Merkmale')
+x_array = [0,1,2,3,4,5,6,7,8,9,10,11]
+
+mWert, stdAbweichung = teste(f_array=x_array)
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung), x_array)
+
+#---Print Hyper-Parameters
+f_array = [0,2,3,9,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+    
+kern = ['poly', 'rbf']
+gammas = [0.1, 0.01, 0.001, 0.0001]
+
+b_C = 0
+b_kern = ''
+b_gamma = 0
+b_tol = 5e-3
+b_max_iter = 250000
+b_random_state = 1
+    
+mWert = 0
+stdAbweichung = 0
+    
+for kernArt in kern:
+    for i in range(10):
+        for j in range(len(gammas)):
+            clf = SVC(C=(i+1)*10/4,kernel=kernArt,gamma=gammas[j],tol=5e-3,max_iter=250000,random_state=1)
+
+            score  = cross_val_score(clf, X_train, y_train, cv=5)
+            s_mean = score.mean()
+            s_std = score.std()
+
+            if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+                mWert = s_mean
+                stdAbweichung = s_std
+                
+                b_C = (i+1)*10/4
+                b_kern = kernArt
+                b_gamma = gammas[j]
+                b_tol = b_tol
+                b_max_iter = b_max_iter
+                b_random_state = b_random_state
+
+for i in range(10):
+    clf = SVC(C=(i+1)*10/4,kernel='linear',tol=5e-3,max_iter=250000,random_state=1)
+
+    score  = cross_val_score(clf, X_train, y_train, cv=5)
+    s_mean = score.mean()
+    s_std = score.std()
+
+    if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+        mWert = s_mean
+        stdAbweichung = s_std
+        
+        b_C = (i+1)*10/4
+        b_kern = kernArt
+        b_gamma = b_gamma
+        b_tol = b_tol
+        b_max_iter = b_max_iter
+        b_random_state = b_random_state
+        
+print("\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung))
+print('C:',b_C)
+print('kernel:',b_kern)
+print('gamma:',b_gamma)
+print('tol:',b_tol)
+print('max_iter:', b_max_iter)
+print('random_state:',b_random_state)
+
+#---Test with full X_test with best Hyper-Parameters
+f_array = [0,2,3,9,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+
+clf = SVC(C=17.5,kernel='rbf',gamma=0.1,tol=0.005,max_iter=250000,random_state=1)
+clf.fit(X_train, y_train)
+score = clf.score(X_train, y_train)
+print('Training score:',score)
+score = clf.score(X_test, y_test)
+print('Test score:',score)
+
+# DECISION TREE
+
+print('\nBEST ACCURACY:\t', "\%0.3f (+/- \%0.3f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--1 Merkmal
+print('----1 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(12):
+    x_array = [i]
+    
+    mWert, stdAbweichung = teste(f_array=x_array)
+    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+        print('!', end='')  
+    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+        h_mWert = mWert
+        h_stdAbweichung = stdAbweichung
+        h_com = copy.deepcopy(x_array)
+        print(':', end='')  
+    else:
+        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--2 Merkmal
+print('----2 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(11):
+    for j in range(11):
+        if i+1+j > 11:
+            break
+        else:
+            x_array = [i,
+                       i+1+j]
+            mWert, stdAbweichung = teste(f_array=x_array)
+            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                print('!', end='')  
+            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                h_mWert = mWert
+                h_stdAbweichung = stdAbweichung
+                h_com = copy.deepcopy(x_array)
+                print(':', end='')  
+            else:
+                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--3 Merkmal
+print('----3 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(10):
+    for j in range(10):
+        for k in range(10):
+            if i+1+j+1+k > 11:
+                break
+            else:
+                x_array = [i,
+                           i+1+j,
+                           i+1+j+1+k]
+                mWert, stdAbweichung = teste(f_array=x_array)
+                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                    print('!', end='')  
+                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                    h_mWert = mWert
+                    h_stdAbweichung = stdAbweichung
+                    h_com = copy.deepcopy(x_array)
+                    print(':', end='')  
+                else:
+                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--4 Merkmal
+print('----4 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(9):
+    for j in range(9):
+        for k in range(9):
+            for l in range(9):
+                if i+1+j+1+k+1+l > 11:
+                    break
+                else:
+                    x_array = [i,
+                               i+1+j,
+                               i+1+j+1+k,
+                               i+1+j+1+k+1+l]
+                    mWert, stdAbweichung = teste(f_array=x_array)
+                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                        print('!', end='')  
+                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                        h_mWert = mWert
+                        h_stdAbweichung = stdAbweichung
+                        h_com = copy.deepcopy(x_array)
+                        print(':', end='')  
+                    else:
+                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--5 Merkmal
+print('----5 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(8):
+    for j in range(8):
+        for k in range(8):
+            for l in range(8):
+                for m in range(8):
+                    if i+1+j+1+k+1+l+1+m > 11:
+                        break
+                    else:
+                        x_array = [i,
+                                   i+1+j,
+                                   i+1+j+1+k,
+                                   i+1+j+1+k+1+l,
+                                   i+1+j+1+k+1+l+1+m]
+                        mWert, stdAbweichung = teste(f_array=x_array)
+                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                            print('!', end='')  
+                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                            h_mWert = mWert
+                            h_stdAbweichung = stdAbweichung
+                            h_com = copy.deepcopy(x_array)
+                            print(':', end='')  
+                        else:
+                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--6 Merkmal
+print('----6 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(7):
+    for j in range(7):
+        for k in range(7):
+            for l in range(7):
+                for m in range(7):
+                    for n in range(7):
+                        if i+1+j+1+k+1+l+1+m+1+n > 11:
+                            break
+                        else:
+                            x_array = [i,
+                                       i+1+j,
+                                       i+1+j+1+k,
+                                       i+1+j+1+k+1+l,
+                                       i+1+j+1+k+1+l+1+m,
+                                       i+1+j+1+k+1+l+1+m+1+n]
+                            mWert, stdAbweichung = teste(f_array=x_array)
+                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                print('!', end='')  
+                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                h_mWert = mWert
+                                h_stdAbweichung = stdAbweichung
+                                h_com = copy.deepcopy(x_array)
+                                print(':', end='')  
+                            else:
+                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--7 Merkmal
+print('----7 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(6):
+    for j in range(6):
+        for k in range(6):
+            for l in range(6):
+                for m in range(6):
+                    for n in range(6):
+                        for o in range(6):
+                            if i+1+j+1+k+1+l+1+m+1+n+1+o > 11:
+                                break
+                            else:
+                                x_array = [i,
+                                           i+1+j,
+                                           i+1+j+1+k,
+                                           i+1+j+1+k+1+l,
+                                           i+1+j+1+k+1+l+1+m,
+                                           i+1+j+1+k+1+l+1+m+1+n,
+                                           i+1+j+1+k+1+l+1+m+1+n+1+o]
+                                mWert, stdAbweichung = teste(f_array=x_array)
+                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                    print('!', end='')  
+                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                    h_mWert = mWert
+                                    h_stdAbweichung = stdAbweichung
+                                    h_com = copy.deepcopy(x_array)
+                                    print(':', end='')  
+                                else:
+                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--8 Merkmal
+print('----8 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(5):
+    for j in range(5):
+        for k in range(5):
+            for l in range(5):
+                for m in range(5):
+                    for n in range(5):
+                        for o in range(5):
+                            for p in range(5):
+                                if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p > 11:
+                                    break
+                                else:
+                                    x_array = [i,
+                                               i+1+j,
+                                               i+1+j+1+k,
+                                               i+1+j+1+k+1+l,
+                                               i+1+j+1+k+1+l+1+m,
+                                               i+1+j+1+k+1+l+1+m+1+n,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o+1+p]
+                                    mWert, stdAbweichung = teste(f_array=x_array)
+                                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                        print('!', end='')  
+                                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                        h_mWert = mWert
+                                        h_stdAbweichung = stdAbweichung
+                                        h_com = copy.deepcopy(x_array)
+                                        print(':', end='')  
+                                    else:
+                                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--9 Merkmal
+print('----9 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(4):
+    for j in range(4):
+        for k in range(4):
+            for l in range(4):
+                for m in range(4):
+                    for n in range(4):
+                        for o in range(4):
+                            for p in range(4):
+                                for q in range(4):
+                                    if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q > 11:
+                                        break
+                                    else:
+                                        x_array = [i,
+                                                   i+1+j,
+                                                   i+1+j+1+k,
+                                                   i+1+j+1+k+1+l,
+                                                   i+1+j+1+k+1+l+1+m,
+                                                   i+1+j+1+k+1+l+1+m+1+n,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q]
+                                        mWert, stdAbweichung = teste(f_array=x_array)
+                                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                            print('!', end='')  
+                                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                            h_mWert = mWert
+                                            h_stdAbweichung = stdAbweichung
+                                            h_com = copy.deepcopy(x_array)
+                                            print(':', end='')  
+                                        else:
+                                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--10 Merkmal
+print('----10 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(3):
+    for j in range(3):
+        for k in range(3):
+            for l in range(3):
+                for m in range(3):
+                    for n in range(3):
+                        for o in range(3):
+                            for p in range(3):
+                                for q in range(3):
+                                    for r in range(3):
+                                        if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r > 11:
+                                            break
+                                        else:
+                                            x_array = [i,
+                                                       i+1+j,
+                                                       i+1+j+1+k,
+                                                       i+1+j+1+k+1+l,
+                                                       i+1+j+1+k+1+l+1+m,
+                                                       i+1+j+1+k+1+l+1+m+1+n,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r]
+                                            mWert, stdAbweichung = teste(f_array=x_array)
+                                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                print('!', end='')  
+                                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                h_mWert = copy.deepcopy(mWert)
+                                                h_stdAbweichung = copy.deepcopy(stdAbweichung)
+                                                h_com = copy.deepcopy(x_array)
+                                                print(':', end='')  
+                                            else:
+                                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--11 Merkmal
+print('----11 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(2):
+    for j in range(2):
+        for k in range(2):
+            for l in range(2):
+                for m in range(2):
+                    for n in range(2):
+                        for o in range(2):
+                            for p in range(2):
+                                for q in range(2):
+                                    for r in range(2):
+                                        for s in range(2):
+                                            if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s > 11:
+                                                break
+                                            else:
+                                                x_array = [i,
+                                                           i+1+j,
+                                                           i+1+j+1+k,
+                                                           i+1+j+1+k+1+l,
+                                                           i+1+j+1+k+1+l+1+m,
+                                                           i+1+j+1+k+1+l+1+m+1+n,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s]
+                                                mWert, stdAbweichung = teste(f_array=x_array)
+                                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                    print('!', end='')  
+                                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                    h_mWert = mWert
+                                                    h_stdAbweichung = stdAbweichung
+                                                    h_com = copy.deepcopy(x_array)
+                                                    print(':', end='')  
+                                                else:
+                                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--12 Merkmale
+print('----12 Merkmale')
+x_array = [0,1,2,3,4,5,6,7,8,9,10,11]
+
+mWert, stdAbweichung = teste(f_array=x_array)
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung), x_array)
+
+#----Print best Hyper-Parameter
+f_array = [1,4,5,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+
+a = ['gini', 'entropy']
+b = ['best', 'random']
+
+b_criterion = ''
+b_splitter = ''
+b_max_depth = 0
+b_min_samples_split = 0
+b_random_state = 1
+
+mWert = 0
+stdAbweichung = 0
+
+for i in range(len(a)):
+    for j in range(len(b)):
+        for k in range(12):
+            for l in range(5):
+                clf = DecisionTreeClassifier(criterion=a[i],splitter=b[j],max_depth=(k+1),
+                                             min_samples_split=(l+2),random_state=1)
+                score  = cross_val_score(clf, X, y, cv=5)
+                s_mean = score.mean()
+                s_std = score.std()
+                if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+                    mWert = s_mean
+                    stdAbweichung = s_std
+                    
+                    b_criterion = a[i]
+                    b_splitter = b[j]
+                    b_max_depth = k+1
+                    b_min_samples_split = l+2
+                    
+print("\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung))
+print('criterion:',b_criterion)
+print('splitter:',b_splitter)
+print('max_depth:', b_max_depth)
+print('min_samples_split:',b_min_samples_split)
+print('random_state:',1)
+
+#---Test with full X_test with best Hyper-Parameters
+f_array = [1,4,5,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+
+clf = DecisionTreeClassifier(criterion='entropy', splitter='best',
+                             max_depth=5, min_samples_split=2, random_state=1)
+clf.fit(X_train, y_train)
+score = clf.score(X_train, y_train)
+print('Training score:',score)
+score = clf.score(X_test, y_test)
+print('Test score:',score)
+
+# ARTIFICIAL NEURAL NETWORK
+
+from sklearn.model_selection import train_test_split
+from sklearn import preprocessing
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import cross_val_score
+
+def teste(f_array, featureset = featureSet):
+    X = np.array(featureSet.iloc[:,f_array])
+    X_scaled = preprocessing.scale(X)
+    y = np.array(featureSet.iloc[:,-1])
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+    
+    mWert = 0
+    stdAbweichung = 0
+    
+    #numNEURON = int(len(f_array)*2)
+    numNEURON = int((len(f_array)+1)/3)
+    if numNEURON == 0:
+        numNEURON = 1
+    
+    a = ['logistic', 'relu']
+    b = ['adam', 'sgd']
+    c = [1, numNEURON, len(f_array), len(f_array)*2]
+
+    for i in range(len(a)):
+        for j in range(len(b)):
+            for k in range(len(c)):
+                clf = MLPClassifier(activation=a[i],
+                                    solver=b[j],
+                                    alpha=1e-4,
+                                    learning_rate_init=0.01,
+                                    hidden_layer_sizes=(c[k],),
+                                    max_iter=10000,
+                                    tol=1e-3,
+                                    random_state=1)
+                score  = cross_val_score(clf, X, y, cv=5)
+                s_mean = score.mean()
+                s_std = score.std()
+                if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+                    mWert = s_mean
+                    stdAbweichung = s_std
+                        
+    return mWert, stdAbweichung
+
+#--1 Merkmal
+print('----1 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(12):
+    x_array = [i]
+    
+    mWert, stdAbweichung = teste(f_array=x_array)
+    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+        print('!', end='')  
+    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+        h_mWert = mWert
+        h_stdAbweichung = stdAbweichung
+        h_com = copy.deepcopy(x_array)
+        print(':', end='')  
+    else:
+        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--2 Merkmal
+print('----2 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(11):
+    for j in range(11):
+        if i+1+j > 11:
+            break
+        else:
+            x_array = [i,
+                       i+1+j]
+            mWert, stdAbweichung = teste(f_array=x_array)
+            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                print('!', end='')  
+            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                h_mWert = mWert
+                h_stdAbweichung = stdAbweichung
+                h_com = copy.deepcopy(x_array)
+                print(':', end='')  
+            else:
+                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--3 Merkmal
+print('----3 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(10):
+    for j in range(10):
+        for k in range(10):
+            if i+1+j+1+k > 11:
+                break
+            else:
+                x_array = [i,
+                           i+1+j,
+                           i+1+j+1+k]
+                mWert, stdAbweichung = teste(f_array=x_array)
+                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                    print('!', end='')  
+                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                    h_mWert = mWert
+                    h_stdAbweichung = stdAbweichung
+                    h_com = copy.deepcopy(x_array)
+                    print(':', end='')  
+                else:
+                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--4 Merkmal
+print('----4 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(9):
+    for j in range(9):
+        for k in range(9):
+            for l in range(9):
+                if i+1+j+1+k+1+l > 11:
+                    break
+                else:
+                    x_array = [i,
+                               i+1+j,
+                               i+1+j+1+k,
+                               i+1+j+1+k+1+l]
+                    mWert, stdAbweichung = teste(f_array=x_array)
+                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                        print('!', end='')  
+                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                        h_mWert = mWert
+                        h_stdAbweichung = stdAbweichung
+                        h_com = copy.deepcopy(x_array)
+                        print(':', end='')  
+                    else:
+                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--5 Merkmal
+print('----5 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(8):
+    for j in range(8):
+        for k in range(8):
+            for l in range(8):
+                for m in range(8):
+                    if i+1+j+1+k+1+l+1+m > 11:
+                        break
+                    else:
+                        x_array = [i,
+                                   i+1+j,
+                                   i+1+j+1+k,
+                                   i+1+j+1+k+1+l,
+                                   i+1+j+1+k+1+l+1+m]
+                        mWert, stdAbweichung = teste(f_array=x_array)
+                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                            print('!', end='')  
+                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                            h_mWert = mWert
+                            h_stdAbweichung = stdAbweichung
+                            h_com = copy.deepcopy(x_array)
+                            print(':', end='')  
+                        else:
+                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--6 Merkmal
+print('----6 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(7):
+    for j in range(7):
+        for k in range(7):
+            for l in range(7):
+                for m in range(7):
+                    for n in range(7):
+                        if i+1+j+1+k+1+l+1+m+1+n > 11:
+                            break
+                        else:
+                            x_array = [i,
+                                       i+1+j,
+                                       i+1+j+1+k,
+                                       i+1+j+1+k+1+l,
+                                       i+1+j+1+k+1+l+1+m,
+                                       i+1+j+1+k+1+l+1+m+1+n]
+                            mWert, stdAbweichung = teste(f_array=x_array)
+                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                print('!', end='')  
+                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                h_mWert = mWert
+                                h_stdAbweichung = stdAbweichung
+                                h_com = copy.deepcopy(x_array)
+                                print(':', end='')  
+                            else:
+                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--7 Merkmal
+print('----7 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(6):
+    for j in range(6):
+        for k in range(6):
+            for l in range(6):
+                for m in range(6):
+                    for n in range(6):
+                        for o in range(6):
+                            if i+1+j+1+k+1+l+1+m+1+n+1+o > 11:
+                                break
+                            else:
+                                x_array = [i,
+                                           i+1+j,
+                                           i+1+j+1+k,
+                                           i+1+j+1+k+1+l,
+                                           i+1+j+1+k+1+l+1+m,
+                                           i+1+j+1+k+1+l+1+m+1+n,
+                                           i+1+j+1+k+1+l+1+m+1+n+1+o]
+                                mWert, stdAbweichung = teste(f_array=x_array)
+                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                    print('!', end='')  
+                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                    h_mWert = mWert
+                                    h_stdAbweichung = stdAbweichung
+                                    h_com = copy.deepcopy(x_array)
+                                    print(':', end='')  
+                                else:
+                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--8 Merkmal
+print('----8 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(5):
+    for j in range(5):
+        for k in range(5):
+            for l in range(5):
+                for m in range(5):
+                    for n in range(5):
+                        for o in range(5):
+                            for p in range(5):
+                                if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p > 11:
+                                    break
+                                else:
+                                    x_array = [i,
+                                               i+1+j,
+                                               i+1+j+1+k,
+                                               i+1+j+1+k+1+l,
+                                               i+1+j+1+k+1+l+1+m,
+                                               i+1+j+1+k+1+l+1+m+1+n,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                               i+1+j+1+k+1+l+1+m+1+n+1+o+1+p]
+                                    mWert, stdAbweichung = teste(f_array=x_array)
+                                    if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                        print('!', end='')  
+                                    elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                        h_mWert = mWert
+                                        h_stdAbweichung = stdAbweichung
+                                        h_com = copy.deepcopy(x_array)
+                                        print(':', end='')  
+                                    else:
+                                        print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--9 Merkmal
+print('----9 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(4):
+    for j in range(4):
+        for k in range(4):
+            for l in range(4):
+                for m in range(4):
+                    for n in range(4):
+                        for o in range(4):
+                            for p in range(4):
+                                for q in range(4):
+                                    if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q > 11:
+                                        break
+                                    else:
+                                        x_array = [i,
+                                                   i+1+j,
+                                                   i+1+j+1+k,
+                                                   i+1+j+1+k+1+l,
+                                                   i+1+j+1+k+1+l+1+m,
+                                                   i+1+j+1+k+1+l+1+m+1+n,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                   i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q]
+                                        mWert, stdAbweichung = teste(f_array=x_array)
+                                        if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                            print('!', end='')  
+                                        elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                            h_mWert = mWert
+                                            h_stdAbweichung = stdAbweichung
+                                            h_com = copy.deepcopy(x_array)
+                                            print(':', end='')  
+                                        else:
+                                            print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--10 Merkmal
+print('----10 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(3):
+    for j in range(3):
+        for k in range(3):
+            for l in range(3):
+                for m in range(3):
+                    for n in range(3):
+                        for o in range(3):
+                            for p in range(3):
+                                for q in range(3):
+                                    for r in range(3):
+                                        if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r > 11:
+                                            break
+                                        else:
+                                            x_array = [i,
+                                                       i+1+j,
+                                                       i+1+j+1+k,
+                                                       i+1+j+1+k+1+l,
+                                                       i+1+j+1+k+1+l+1+m,
+                                                       i+1+j+1+k+1+l+1+m+1+n,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                       i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r]
+                                            mWert, stdAbweichung = teste(f_array=x_array)
+                                            if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                print('!', end='')  
+                                            elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                h_mWert = mWert
+                                                h_stdAbweichung = stdAbweichung
+                                                h_com = copy.deepcopy(x_array)
+                                                print(':', end='')  
+                                            else:
+                                                print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--11 Merkmal
+print('----11 Merkmal')
+
+x_array = []
+
+h_mWert = 0
+h_stdAbweichung = 0
+h_com = []
+
+for i in range(2):
+    for j in range(2):
+        for k in range(2):
+            for l in range(2):
+                for m in range(2):
+                    for n in range(2):
+                        for o in range(2):
+                            for p in range(2):
+                                for q in range(2):
+                                    for r in range(2):
+                                        for s in range(2):
+                                            if i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s > 11:
+                                                break
+                                            else:
+                                                x_array = [i,
+                                                           i+1+j,
+                                                           i+1+j+1+k,
+                                                           i+1+j+1+k+1+l,
+                                                           i+1+j+1+k+1+l+1+m,
+                                                           i+1+j+1+k+1+l+1+m+1+n,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r,
+                                                           i+1+j+1+k+1+l+1+m+1+n+1+o+1+p+1+q+1+r+1+s]
+                                                mWert, stdAbweichung = teste(f_array=x_array)
+                                                if mWert==h_mWert and stdAbweichung == h_stdAbweichung:
+                                                    print('!', end='')  
+                                                elif mWert > h_mWert or (mWert==h_mWert and stdAbweichung < h_stdAbweichung):
+                                                    h_mWert = mWert
+                                                    h_stdAbweichung = stdAbweichung
+                                                    h_com = copy.deepcopy(x_array)
+                                                    print(':', end='')  
+                                                else:
+                                                    print('.', end='')
+
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (h_mWert, h_stdAbweichung), h_com)
+
+#--12 Merkmale
+print('----12 Merkmale')
+x_array = [0,1,2,3,4,5,6,7,8,9,10,11]
+
+mWert, stdAbweichung = teste(f_array=x_array)
+print('\nBEST ACCURACY:\t', "\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung), x_array)
+
+#----Print best Hyper-Parameter
+f_array = [0,1,2,3,4,5,7,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+    
+mWert = 0
+stdAbweichung = 0
+
+numNEURON = int((len(f_array)+1)/3)
+if numNEURON == 0:
+    numNEURON = 1
+
+a = ['logistic', 'relu']
+b = ['adam', 'sgd']
+c = [1, numNEURON, len(f_array), len(f_array)*2]
+
+b_activation = ''
+b_solver = ''
+b_alpha = 1e-4
+b_learning_rate_init = 0.01
+b_hidden_layer_sizes = 0
+b_max_iter = 10000
+b_tol = 1e-3
+b_random_state = 1
+
+for i in range(len(a)):
+    for j in range(len(b)):
+        for k in range(len(c)):
+            clf = MLPClassifier(activation=a[i],solver=b[j],alpha=1e-4,learning_rate_init=0.01,
+                                hidden_layer_sizes=(c[k],),max_iter=10000,tol=1e-3,random_state=1)
+            score  = cross_val_score(clf, X, y, cv=5)
+            s_mean = score.mean()
+            s_std = score.std()
+            if s_mean > mWert or (s_mean==mWert and s_std < stdAbweichung):
+                mWert = s_mean
+                stdAbweichung = s_std
+                
+                b_activation = a[i]
+                b_solver = b[j]
+                b_hidden_layer_sizes = c[k]
+                
+print("\%0.2f (+/- \%0.2f)" \% (mWert, stdAbweichung))
+print('activation:', b_activation)
+print('solver:', b_solver)
+print('alpha:', b_alpha)
+print('learning_rate_init:',0.01)
+print('hidden_layer_sizes:','(',b_hidden_layer_sizes,',)')
+print('max_iter:', 10000)
+print('tol:',1e-3)
+print('random_state:',1)
+
+#---Test with full X_test with best Hyper-Parameters
+f_array = [0,1,2,3,4,5,7,11]
+X = np.array(featureSet.iloc[:,f_array])
+X_scaled = preprocessing.scale(X)
+y = np.array(featureSet.iloc[:,-1])
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=9)
+
+clf = MLPClassifier(activation='relu', solver='adam', alpha=0.0001,
+                    learning_rate_init=0.01, hidden_layer_sizes=(3,), max_iter=10000,
+                    tol=0.001, random_state=1)
+clf.fit(X_train, y_train)
+score = clf.score(X_train, y_train)
+print('Training score:',score)
+score = clf.score(X_test, y_test)
+print('Test score:',score)
